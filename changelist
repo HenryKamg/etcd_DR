@@ -1,0 +1,10 @@
+[etcd-backup-1.0]
+/08/18/2016 finish the most important feature development
+/08/18/2016 On-line test
+[etcd_DR 2.0]
+/08/21/2016 Recoding the core code with Python
+/08/21/2016 add features
+[etcd_DR 3.0]
+/08/23/2016 add flock
+/08/21/2016 bug fix
+

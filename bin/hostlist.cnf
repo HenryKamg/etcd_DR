@@ -1,0 +1,7 @@
+[server1]
+
+username = etcd
+
+ipaddress = 10.173.192.130
+
+backupdirs = backup

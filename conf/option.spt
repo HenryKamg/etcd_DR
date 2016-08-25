@@ -1,0 +1,2 @@
+etcd_key=("default" "start" "stop" "status")
+etcd_value=("start_process" "start_process" "kill_process" "process_status")

@@ -1,0 +1,8 @@
+[server1]
+
+username = test1
+
+ipaddress = 10.173.192.127
+
+backupdirs = backup
+

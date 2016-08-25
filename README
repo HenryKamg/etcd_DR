@@ -1,0 +1,38 @@
+This is etcd Disaster Recovery version 3.1
+=============================================
+
+Introduction
+---------------------------------------------
+Usage: ./bin/etcd    [-h|--help]
+                     [-v|-V|--version]
+                     [-t|--terminal] optstring [options]
+   -h, --help                Usage guide
+   -v|-V, --version          Output version information
+   -t, --terminal            Options to be executed
+
+   Examples:
+   ./bin/etcd -t start
+   ./bin/etcd -t "start,stop,status"
+
+   Execute Option introduction:
+   start,           --Run etcd backup process
+   stop,            --Stop etcd backup recovery process
+   status,          --Simulate process
+
+What it refer to?
+------------------------------------------------
+
+It's written refer to Run an ETCD backup case. 
+
+
+Where's the backup files?
+------------------------------------------------
+
+Please get the backup files under /var/lib/etcd_tar.
+
+
+Where's can I get the test log?
+------------------------------------------------
+
+You can get it under [root_path]/log.
+

@@ -1,0 +1,243 @@
+#!/bin/bash
+
+ROOTPATH=`dirname $0`
+rsync_remote_backup="$ROOTPATH/rsync_remote_backup.py"
+process_status="$ROOTPATH/process_status"
+
+#get configuration
+source ${ROOTPATH}/../conf/option.spt
+
+ERRFILE="${ROOTPATH}/../log/errlog"
+LOGFILE="/root/etcd_DR/log/testlog"
+FLAGFILE="${ROOTPATH}/../tmp/.tmp.$ID"
+REMOTEBAK="/root/etcd_DR/bin/rsync_remote_backup.py"
+RUNCOM="`cd $ROOTPATH;pwd`/`basename $0` $@"
+LOCKFILE="/root/etcd_DR/conf/mytest.lock"
+HOSTLIST="/root/etcd_DR/conf/hostlist.cnf"
+CRONTAB="/etc/crontab"
+STARTSTAT='active \(running\)'
+STOPSTAT="inactive \(dead\)"
+
+OKSTAT="\033[0;32;40mPASS\033[0m"
+FAILSTAT="\033[0;31;40mFAIL\033[0m"
+ONGOING=2
+STOP=3
+ABNORMAL=4
+TESTPASS=5
+TESTFAIL=6
+INTERACTION=7
+
+function show_version() {
+    echo "Tool Version: 3.0"
+    echo "Updated Time: 08/23/2016"
+    echo "Author: i-kangkai@360.cn"
+}
+
+#show Tool usage
+function show_usage() {
+    echo -e "`printf %-20s "Usage: $0"` [-h|--help]"
+    echo -e "`printf %-20s` [-v|-V|--version]"
+    echo -e "`printf %-20s` [-t|--terminal] optstring [options]"
+
+    echo -e "`printf %-2s` -h, --help                Usage guide"
+    echo -e "`printf %-2s` -v|-V, --version          Output version information"
+    echo -e "`printf %-2s` -t, --terminal            Options to be executed"
+    
+    echo ""
+    echo -e "`printf %-2s` Examples:"
+    echo -e "`printf %-2s` $0 -t start"
+    echo -e "`printf %-2s` $0 -t \"start,stop,status\""
+
+    echo ""
+    echo -e "`printf %-2s` Execute Option introduction:"
+    echo -e "`printf %-2s` start,           --Run etcd backup process"
+    echo -e "`printf %-2s` stop,            --Stop etcd backup recovery process"
+    echo -e "`printf %-2s` status,          --Simulate process"
+}
+
+#init the test environment
+function env_init() { 
+    if [ -e "$FLAGFILE" ] && [ "{$ROOTPATH:0:1}" == "." ]
+    then
+        rm -rf $FLAGFILE
+    fi
+}
+
+#output 
+function printOK() {
+    local testObj=$1
+    local resultFile=$2
+    local result=$3
+    
+    echo "${testObj},${result},${OKSTAT}" >> $resultFile
+    write_stat $TESTPASS
+}
+
+function printFail() {
+    local testObj=$1
+    local resultFile=$2
+    local result=$3
+
+    echo "${testObj},${result},${FAILSTAT}" >> $resultFile
+    write_stat $TESTFAIL
+}
+
+function printErr() {
+    local testObj=$1
+    local resultFile=$2
+    local result=$3
+
+    echo "${testObj},${result},Err" |tee $ERRFILE
+    write_stat $ABNORMAL
+}
+
+function test_begin() {
+    local test_obj="$1"
+    echo "${test_obj} Begin..."
+    write_stat $ONGOING
+}
+
+function test_done() {
+    local test_obj="$1"
+    echo "${test_obj} Done..."
+    write_stat $STOP
+}
+
+#exchange upper character to lower, used for string comparassion
+function lowercase() {
+    if [ "$#" -ne 1 ]
+    then
+        echo "$FUNCNAME usage:$FUNCNAME str"
+    fi
+
+    str="$1"
+    echo $str | tr '[A-Z]' '[a-z]'
+}
+
+#flag of some test runs or not: 0 for test, 1 for test already done
+function run_flag() {
+    if [ "$#" -ne 1 ]
+    then
+        echo "$FUNCNAME loss arguments"
+    else
+        str_sub=$1
+        if [ ! -e "$FLAGFILE" ]
+        then 
+            echo 0 
+        elif [[ `grep "$str_sub$" $FLAGFILE` == "" ]]
+        then
+            echo 0
+        else
+            echo 1
+        fi
+    fi
+}
+
+function write_stat() {
+    local write_info="$1"
+    #echo "$write_info" |tee $STATFILE
+    echo "$write_info" > $STATFILE
+}
+
+
+
+function run_test() {
+    #Get test augument
+    test_args="$1"
+    
+    if [ "${test_args}" == "default" ]
+    then
+	start_process        
+    else
+        #run needed test
+        test_args=(`echo $test_args |awk -F, '{for(i=1;i<=NF;i++) {print $i}}'`)
+        local arg_num=${#test_args[@]}
+        local i
+        local j
+        for ((i=0; i<$arg_num; i++))
+        do
+            test_arg=${test_args[$i]}
+            [[ ! "${etcd_key[@]}" =~ "${test_arg}" ]] && (echo "Not support Option"; show_usage ; exit 1)
+            for ((j=0; j<${#etcd_key[@]}; j++))
+            do
+                if [ "$test_arg" == "${etcd_key[$j]}" ]
+                then
+                    ${etcd_value[$j]}
+                fi
+            done
+        done
+    fi
+}
+
+
+function start_process() {
+    test_begin "$FUNCNAME"
+    #local cron_command="*/5 0 * * * root python3 $rsync_remote_backup"
+    local cron_command="*/5 * * * * flock -xn $LOCKFILE -c 'python3 $REMOTEBAK --hostlist $HOSTLIST >> $LOGFILE'"
+    $(crontab -r)
+    echo -e "$cron_command"
+    echo -e "$cron_command" > $CRONTAB
+    $(systemctl start crond.service)
+    $(crontab $CRONTAB)
+    test_done "$FUNCNAME"
+    echo "$FUNCNAME">>$FALGFILE
+}
+
+function kill_process() {
+    test_begin "$FUNCNAME"
+    $(systemctl stop crond.service)
+    test_done "$FUNCNAME"
+    echo "$FUNCNAME">>$FALGFILE
+}
+
+function process_status() {
+    test_begin "$FUNCNAME"
+    #$(/etc/init.d/cron status)
+    if [[ $(systemctl status crond.service)  =~ $STARTSTAT ]];then
+        echo "Job is running"
+    else
+        echo "Job is down"
+    fi
+	test_done "$FUNCNAME"
+    echo "$FUNCNAME">>$FALGFILE
+}
+[[ ! -n "$1" ]] && show_usage && exit
+
+ARGS=`getopt -o vVht:l: --long version,help,testing,logfile -- "$@"`
+
+arg_stat=$?
+if [ "$arg_stat" -ne 0 ] 
+then
+    echo "Unkown argument!"
+    show_usage
+    exit
+fi
+
+#ARGS=`getopt -q -o vVht: --long version,help,testing -- "$@"`
+eval set -- "${ARGS}"
+
+while true
+do
+    case "$1" in
+        -v|-V|--version)
+            show_version; exit 0
+            ;;
+        -h|--help)
+            show_usage; exit 0
+            ;;
+        -t|--testing)
+            CONFIG_TEST="$2";shift 2
+            run_test "$CONFIG_TEST"
+            ;;
+        -l|--logfile)
+            LOG_FILE="$2";shift 2
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            echo -e "\033[31mERROR: unkown argument! \033[0m\n" && show_usage && exit 1
+            ;;
+    esac
+done
